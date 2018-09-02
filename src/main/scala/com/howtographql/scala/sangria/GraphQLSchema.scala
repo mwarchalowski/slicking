@@ -16,11 +16,25 @@ object GraphQLSchema {
     )
   )
 
+  val Id = Argument("id", IntType)
+  val Ids = Argument("ids", ListInputType(IntType))
+
   // 2
   val QueryType = ObjectType(
     "Query",
     fields[MyContext, Unit](
-      Field("allLinks", ListType(LinkType), resolve = c => c.ctx.dao.allLinks)
+      Field("allLinks",
+        ListType(LinkType),
+        resolve = c => c.ctx.dao.allLinks),
+      Field("link", //1
+        OptionType(LinkType), //2
+        arguments = Id :: Nil,
+        resolve = c => c.ctx.dao.getLink(c.arg(Id))),
+      Field("links", //1
+        ListType(LinkType), //2
+        arguments = Ids :: Nil,
+        resolve = c => c.ctx.dao.getLinks(c.arg(Ids)) //4
+      )
     )
   )
 
