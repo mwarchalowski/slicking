@@ -10,4 +10,14 @@ class DAO(db: Database) {
   def getLinks(ids: Seq[Int]) = db.run(
     Links.filter(_.id inSet ids).result
   )
+
+  def allUsers = db.run(Users.result)
+  def getUsers(ids: Seq[Int]) = db.run(
+    Users.filter(_.id inSet ids).result
+  )
+
+  def allVotes = db.run(Votes.result)
+  def getVotes(ids: Seq[Int]) = db.run(
+    Votes.filter(_.id inSet ids).result
+  )
 }

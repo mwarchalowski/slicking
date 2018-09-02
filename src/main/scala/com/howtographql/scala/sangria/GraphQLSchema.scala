@@ -26,8 +26,16 @@ object GraphQLSchema {
     }
   )
 
+  val IdentifiableType = InterfaceType(
+    "Identifiable",
+    fields[Unit, Identifiable](
+      Field("id", IntType, resolve = _.value.id)
+    )
+  )
+
   val LinkType = ObjectType[Unit, Link](
     "Link",
+    interfaces[Unit, Link](IdentifiableType),
     fields[Unit, Link](
       Field("id", IntType, resolve = _.value.id),
       Field("url", StringType, resolve = _.value.url),
@@ -35,16 +43,34 @@ object GraphQLSchema {
       Field("createdAt", GraphQLDateTime, resolve= _.value.createdAt)
     )
   )
-  implicit val linkHasId = HasId[Link, Int](_.id)
-
-  val Id = Argument("id", IntType)
-  val Ids = Argument("ids", ListInputType(IntType))
-
+//  implicit val LinkType =  deriveObjectType[Unit, Link](
+//    Interfaces(IdentifiableType),
+//    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+//  )
   val linksFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids)
   )
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher)
+  val UserType =  deriveObjectType[Unit, User](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  )
+  val usersFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
+  )
+
+  val VoteType =  deriveObjectType[Unit, Vote](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  )
+  val votesFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  )
+
+  val Id = Argument("id", IntType)
+  val Ids = Argument("ids", ListInputType(IntType))
+
+  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
   // 2
   val QueryType = ObjectType(
@@ -52,15 +78,28 @@ object GraphQLSchema {
     fields[MyContext, Unit](
       Field("allLinks",
         ListType(LinkType),
-        resolve = c => c.ctx.dao.allLinks),
+        resolve = c => c.ctx.dao.allLinks
+      ),
       Field("link", //1
         OptionType(LinkType), //2
         arguments = Id :: Nil,
-        resolve = c => linksFetcher.defer(c.arg(Id))),
+        resolve = c => linksFetcher.defer(c.arg(Id))
+      ),
       Field("links", //1
         ListType(LinkType), //2
         arguments = Ids :: Nil,
-        resolve = c => linksFetcher.deferSeq(c.arg(Ids))) //4
+        resolve = c => linksFetcher.deferSeq(c.arg(Ids)),
+      ),
+      Field("users", //1
+        ListType(UserType), //2
+        arguments = Ids :: Nil,
+        resolve = c => usersFetcher.deferSeq(c.arg(Ids)),
+      ),
+      Field("votes", //1
+        ListType(VoteType), //2
+        arguments = Ids :: Nil,
+        resolve = c => votesFetcher.deferSeq(c.arg(Ids)),
+      ),
     )
   )
 
