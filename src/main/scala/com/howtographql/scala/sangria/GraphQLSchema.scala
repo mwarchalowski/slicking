@@ -8,15 +8,31 @@ import sangria.execution.deferred.HasId
 // #
 import sangria.schema._
 import sangria.macros.derive._
+import sangria.ast.StringValue
+import akka.http.scaladsl.model.DateTime
 
 object GraphQLSchema {
-  // 1
+
+  implicit val GraphQLDateTime = ScalarType[DateTime](//1
+    "DateTime",//2
+    coerceOutput = (dt, _) => dt.toString, //3
+    coerceInput = { //4
+      case StringValue(dt, _, _ ) => DateTime.fromIsoDateTimeString(dt).toRight(DateTimeCoerceViolation)
+      case _ => Left(DateTimeCoerceViolation)
+    },
+    coerceUserInput = { //5
+      case s: String => DateTime.fromIsoDateTimeString(s).toRight(DateTimeCoerceViolation)
+      case _ => Left(DateTimeCoerceViolation)
+    }
+  )
+
   val LinkType = ObjectType[Unit, Link](
     "Link",
     fields[Unit, Link](
       Field("id", IntType, resolve = _.value.id),
       Field("url", StringType, resolve = _.value.url),
-      Field("description", StringType, resolve = _.value.description)
+      Field("description", StringType, resolve = _.value.description),
+      Field("createdAt", GraphQLDateTime, resolve= _.value.createdAt)
     )
   )
   implicit val linkHasId = HasId[Link, Int](_.id)
