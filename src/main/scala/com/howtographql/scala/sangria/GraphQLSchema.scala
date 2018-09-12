@@ -3,7 +3,8 @@ import sangria.schema.{Field, ListType, ObjectType}
 import models._
 import sangria.execution.deferred.Fetcher
 import sangria.execution.deferred.DeferredResolver
-import sangria.execution.deferred.HasId
+import sangria.execution.deferred.Relation
+import sangria.execution.deferred.RelationIds
 
 // #
 import sangria.schema._
@@ -33,38 +34,50 @@ object GraphQLSchema {
     )
   )
 
-  val LinkType = ObjectType[Unit, Link](
-    "Link",
-    interfaces[Unit, Link](IdentifiableType),
-    fields[Unit, Link](
-      Field("id", IntType, resolve = _.value.id),
-      Field("url", StringType, resolve = _.value.url),
-      Field("description", StringType, resolve = _.value.description),
-      Field("createdAt", GraphQLDateTime, resolve= _.value.createdAt)
-    )
-  )
-//  implicit val LinkType =  deriveObjectType[Unit, Link](
-//    Interfaces(IdentifiableType),
-//    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
-//  )
-  val linksFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids)
-  )
-
-  val UserType =  deriveObjectType[Unit, User](
+  lazy val UserType : ObjectType[Unit, User] =  deriveObjectType[Unit, User](
     Interfaces(IdentifiableType),
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+    ReplaceField("createdAt",
+      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
+    AddFields(
+      Field("links", ListType(LinkType), resolve = c =>  linksFetcher.deferRelSeq(linkByUserRel, c.value.id))),
+    AddFields(
+      Field("votes", ListType(VoteType), resolve = c =>  votesFetcher.deferRelSeq(voteByUserRel, c.value.id))),
+
   )
   val usersFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
+  lazy val LinkType : ObjectType[Unit, Link] =  deriveObjectType[Unit, Link](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt",
+      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
+    ReplaceField("postedBy",
+      Field("postedBy", UserType, resolve = c => usersFetcher.defer(c.value.postedBy))),
+    AddFields(
+      Field("votes", ListType(VoteType), resolve = c => votesFetcher.deferRelSeq(voteByLinkRel, c.value.id))
+      )
+
+  )
+  val linkByUserRel = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
+  val voteByUserRel = Relation[Vote, Int]("byUser", v => Seq(v.userId))
+  val voteByLinkRel = Relation[Vote, Int]("byLink", v => Seq(v.linkId))
+
+  val linksFetcher = Fetcher.rel(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
+    (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
+  )
+
   val VoteType =  deriveObjectType[Unit, Vote](
     Interfaces(IdentifiableType),
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+    ExcludeFields("userId", "linkId"),
+    AddFields(Field("user",  UserType, resolve = c => usersFetcher.defer(c.value.userId))),
+    AddFields(Field("link",  LinkType, resolve = c => linksFetcher.defer(c.value.linkId)))
   )
-  val votesFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  val votesFetcher = Fetcher.rel(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids),
+//    (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByUserIds(ids(voteByUserRel))
+    (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByRelationIds(ids)
   )
 
   val Id = Argument("id", IntType)
